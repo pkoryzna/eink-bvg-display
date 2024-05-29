@@ -1,5 +1,7 @@
 # eInk BVG Display
 
+![eInk display inside a photo frame displaying U2 and U5 departures from Alexanderplatz](hardware/front.jpeg)
+
 Displays upcoming BVG departures for selected lines and directions,
 using https://v6.bvg.transport.rest/ API.
 
