@@ -1,0 +1,3 @@
+micropython-esp32-stubs==1.18.post3
+micropython-stdlib-stubs==1.0.0
+Pillow==10.1.0

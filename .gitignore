@@ -1,0 +1,4 @@
+fonts/
+config.json
+*.pyc
+.DS_Store

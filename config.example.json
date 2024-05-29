@@ -1,0 +1,23 @@
+{
+    "stops": [
+        "900100003"
+    ],
+    "remove_phrases": [
+        " (Berlin)",
+        "S+U "
+    ],
+    "lines_directions": [
+        {
+            "line_name": "U2",
+            "direction_regex": ".*"
+        },
+        {
+            "line_name": "U5",
+            "direction_regex": "Hauptbahnhof"
+        }
+    ],
+    "wifi": {
+        "ssid": "Vadophone_2137",
+        "key": "your_P@ssw0rd"
+    }
+}

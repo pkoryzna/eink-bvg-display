@@ -1,0 +1,3 @@
+[submodule "Inkplate-micropython"]
+	path = Inkplate-micropython
+	url = git@github.com:SolderedElectronics/Inkplate-micropython.git
