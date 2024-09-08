@@ -1,6 +1,6 @@
 import requests
 
-URL_TEMPLATE = "https://v6.bvg.transport.rest/stops/{}/departures/"
+URL_TEMPLATE = "https://v6.vbb.transport.rest/stops/{}/departures/"
 
 UNRESERVED_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
 
