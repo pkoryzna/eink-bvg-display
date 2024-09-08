@@ -4,6 +4,7 @@ import json
 import time
 import machine
 
+from cache import StateCache, UIDeparture
 from soldered_inkplate6 import Inkplate
 
 import transport_api
@@ -28,9 +29,6 @@ REGULAR = MonoFont(font_dict=regular_font, preload_chars=False)
 
 UIState = collections.namedtuple("UIState", ("departures", "created_at"))
 Message = collections.namedtuple("Message", ("text", "created_at"))
-UIDeparture = collections.namedtuple(
-    "UIDeparture", ("line_name", "direction", "time_left", "stop")
-)
 XY = collections.namedtuple("XY", ("x", "y"))
 
 display = Inkplate(Inkplate.INKPLATE_1BIT)
@@ -97,36 +95,55 @@ def is_relevant(
 
 
 def get_configured_departures(
-    stops: list[str], lines_directions: list, remove_phrases: list[str]
+    stops: list[str], lines_directions: list, remove_phrases: list[str], cache: StateCache
 ) -> dict[str, list[UIDeparture]]:
-    departures = []
-    now = dateutil.now_epoch()
+    MAX_AGE = 30 # seconds
+    cached_departures_age = dateutil.now_epoch() - cache.last_departure_update 
+    if cached_departures_age > MAX_AGE:
+        try:
+            departures = update_departures_from_api(stops, lines_directions, remove_phrases, cache)
+        except OSError as e:
+            show_status_message(f"Could not connect to transport API: {type(e)}: {e}")
+            show_status_message("Using cached departures")
+            departures = cache.departures
+    else:
+        departures = cache.departures
+        show_status_message(f"Using cached departures, got the last update {cached_departures_age} sec ago")
+
+    grouped_by_stop = dict()
+    for d in departures:
+        stop_departures = grouped_by_stop.get(d.stop, list())
+        stop_departures.append(d)
+        grouped_by_stop[d.stop] = stop_departures
+
+    cache.departures = departures
+
+    return grouped_by_stop
+
+def update_departures_from_api(stops, lines_directions, remove_phrases, cache) -> list[UIDeparture]:
+    departures: list[UIDeparture] = []
+    update_start_time = dateutil.now_epoch()
 
     for stop_id in stops:
         _log("getting departures from api for", stop_id)
         all_departures_from_stop = transport_api.get_departures(stop_id)
         _log("got", len(all_departures_from_stop), "departures from", stop_id)
         departures_list = [
-            d for d in all_departures_from_stop if is_relevant(d, lines_directions, now)
-        ]
+                    d for d in all_departures_from_stop if is_relevant(d, lines_directions, update_start_time)
+                ]
         for api_departure in departures_list:
             display_direction = clean_string(api_departure["direction"], remove_phrases)
 
             departures.append(
-                UIDeparture(
-                    api_departure["line"]["name"],
-                    display_direction,
-                    _when(api_departure) - now,
-                    clean_string(api_departure["stop"]["name"], remove_phrases),
-                )
-            )
-    filtered = dict()
-    for d in departures:
-        stop_departures = filtered.get(d.stop, list())
-        stop_departures.append(d)
-        filtered[d.stop] = stop_departures
-
-    return filtered
+                        UIDeparture(
+                            api_departure["line"]["name"],
+                            display_direction,
+                            _when(api_departure) - update_start_time,
+                            clean_string(api_departure["stop"]["name"], remove_phrases),
+                        )
+                    )
+    cache.last_departure_update = update_start_time
+    return departures
 
 
 MARGIN = 5
@@ -188,14 +205,14 @@ def display_clock(utc_offset_seconds: int):
     )
 
 
-def should_set_time(cache: dict) -> bool:
+def should_set_time(cache: StateCache) -> bool:
     seconds_since_update = abs(
-        dateutil.now_epoch() - cache.get("last_rtc_ntp_update", 0)
+        dateutil.now_epoch() - cache.last_rtc_ntp_update
     )
-    return seconds_since_update > 1 * 60 * 60
+    return cache.last_rtc_ntp_update == 0 or seconds_since_update > 1 * 60 * 60
 
 
-def loop(config, cache):
+def loop(config, cache: StateCache):
     global start_time_ticks
     if not netutil.wlan.isconnected():
         connect_wifi(config, cache)
@@ -203,12 +220,13 @@ def loop(config, cache):
     if should_set_time(cache):
         show_status_message("Setting time from NTP...")
         netutil.setup_time()
-        cache["last_rtc_ntp_update"] = dateutil.now_epoch()
+        cache.last_rtc_ntp_update = dateutil.now_epoch()
 
     departures = get_configured_departures(
         config["stops"],
         config["lines_directions"],
         config["remove_phrases"],
+        cache
     )
     tz_info = timezone_api.get_tz_info_for_my_ip(config=config, cache=cache)
 
@@ -224,8 +242,7 @@ def loop(config, cache):
     utc_offset_seconds = get_utc_offset(tz_info)
     display_clock(utc_offset_seconds)
     display.display()
-
-    save_cache(cache)
+    cache.perist()
     _log(
         "loop() done in",
         time.ticks_diff(time.ticks_ms(), start_time_ticks),
@@ -260,40 +277,20 @@ def go_to_sleep():
         return False
 
 
-def connect_wifi(config, cache):
+def connect_wifi(config, cache: StateCache):
     wifi_conf = config["wifi"]
     ssid = wifi_conf["ssid"]
     show_status_message(f"Connecting to WiFi '{ssid}'")
     ip, _, _, _ = netutil.do_connect(ssid, wifi_conf.get("key", None))
     show_status_message(f"Connected to {ssid} ({ip})")
-    cache["last_connected_wifi"] = config["wifi"]["ssid"]
-
-
-def load_cache():
-    try:
-        with open("/cache.json", encoding="utf-8") as cache_file:
-            cache_dict = json.load(cache_file)
-        if not isinstance(cache_dict, dict):
-            raise TypeError(
-                f"loaded cache was not a dict, it was a '{type(cache_dict).__name__}'"
-            )
-        return cache_dict
-
-    except (OSError, TypeError) as e:
-        _log("failed to load cache :( ", type(e).__name__, str(e))
-        return dict()
-
-
-def save_cache(cache):
-    with open("/cache.json", "wt", encoding="utf-8") as json_file:
-        json.dump(cache, json_file)
+    cache.last_connected_wifi_ssid = config["wifi"]["ssid"]
 
 
 def main():
     try:
         while True:
             config = load_config()
-            cache = load_cache()
+            cache = StateCache.load_cache()
             loop(config, cache)
 
     except KeyboardInterrupt:

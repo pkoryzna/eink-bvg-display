@@ -1,4 +1,5 @@
 import requests
+from cache import StateCache
 import dateutil
 
 TIME_API_IP_URL = "http://worldtimeapi.org/api/ip"
@@ -18,17 +19,17 @@ def _run_request(url: str, method: str):
     ).json()
 
 
-def get_tz_info_for_my_ip(cache, config):
+def get_tz_info_for_my_ip(cache: StateCache, config):
     if check_needed(cache, config):
         _log("fetching TZ info from current IP")
-        cache["last_tz_response"] = _run_request(TIME_API_IP_URL, "GET")
-    return cache["last_tz_response"]
+        cache.last_tz_response = _run_request(TIME_API_IP_URL, "GET")
+    return cache.last_tz_response
 
-def check_needed(cache: dict, config: dict) -> bool:
-    if cache.get("last_connected_wifi", "") != config["wifi"]["ssid"]:
+def check_needed(cache: StateCache, config: dict) -> bool:
+    if cache.last_connected_wifi_ssid != config["wifi"]["ssid"]:
         return True
 
-    last_tz_resp = cache.get("last_tz_response")
+    last_tz_resp = cache.last_tz_response
     if not last_tz_resp:
         return True
     
