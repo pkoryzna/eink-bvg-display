@@ -38,11 +38,16 @@ def check_needed(cache: StateCache, config: dict) -> bool:
     now_epoch = dateutil.now_epoch()
     if now_epoch - last_check_epoch > 12*60*60:
         return True
-    if last_tz_resp["dst"]:
-        if now_epoch > dateutil.parse_iso(last_tz_resp["dst_until"]):
+    
+    is_dst = last_tz_resp["dst"]
+
+    if is_dst:
+        until_str = last_tz_resp["dst_until"]
+        if until_str is not None and now_epoch > dateutil.parse_iso(until_str):
             return True
     else:
-        if now_epoch > dateutil.parse_iso(last_tz_resp["dst_from"]):
+        from_str = last_tz_resp["dst_from"]
+        if from_str is not None and now_epoch > dateutil.parse_iso(from_str):
             return True
         
     return False
