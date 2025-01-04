@@ -1,7 +1,7 @@
 set shell := ["bash", "-xeEuo", "pipefail", "-c"]
 
 FIRMWARE_VER := "ESP32_GENERIC-SPIRAM-20241129-v1.24.1.bin"
-SERIAL_PORT := "/dev/tty.usbserial-10"
+# SERIAL_PORT := "/dev/tty.usbserial-10"
 
 # List available recipes
 help:
@@ -14,8 +14,8 @@ install-everything-from-scratch:
 
 flash-mpy:
     cd /tmp && curl -L -O https://micropython.org/resources/firmware/{{FIRMWARE_VER}} \
-        && esptool.py --chip esp32 --port {{SERIAL_PORT}} --baud 460800 erase_flash \
-        && esptool.py --chip esp32 --port {{SERIAL_PORT}} --baud 460800 write_flash -z 0x1000 {{FIRMWARE_VER}}
+        && esptool.py --chip esp32 --baud 460800 erase_flash \
+        && esptool.py --chip esp32 --baud 460800 write_flash -z 0x1000 {{FIRMWARE_VER}}
 
 install-deps:
     git submodule init
