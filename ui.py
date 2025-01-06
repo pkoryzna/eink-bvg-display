@@ -303,6 +303,9 @@ def connect_wifi(config, cache: StateCache):
 
 
 def main():
+    if machine.reset_cause() not in (machine.DEEPSLEEP_RESET,):
+        display.begin()
+        display.display()
     try:
         while True:
             config = load_config()
