@@ -43,8 +43,9 @@ def timedelta_pformat(td: int, now_threshold: int = 30) -> str:
     formatted = ""
     seconds = td
 
-    minutes = seconds // 60
-    hours = minutes // 60
+    minutes_total = seconds // 60
+    hours = minutes_total // 60
+    minutes = minutes_total % 60
 
     if hours:
         formatted += f"{hours}h"
