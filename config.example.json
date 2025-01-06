@@ -2,6 +2,7 @@
     "stops": [
         "900100003"
     ],
+    "max_duration_min": 180,
     "remove_phrases": [
         " (Berlin)",
         "S+U "

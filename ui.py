@@ -95,20 +95,32 @@ def is_relevant(
 
 
 def get_configured_departures(
-    stops: list[str], lines_directions: list, remove_phrases: list[str], cache: StateCache
+    stops: list[str],
+    lines_directions: list,
+    remove_phrases: list[str],
+    cache: StateCache,
+    departures_max_duration_min: int,
 ) -> dict[str, list[UIDeparture]]:
-    MAX_AGE = 30 # seconds
-    cached_departures_age = dateutil.now_epoch() - cache.last_departure_update 
+    MAX_AGE = 30  # seconds
+    cached_departures_age = dateutil.now_epoch() - cache.last_departure_update
     if cached_departures_age > MAX_AGE:
         try:
-            departures = update_departures_from_api(stops, lines_directions, remove_phrases, cache)
+            departures = update_departures_from_api(
+                stops,
+                lines_directions,
+                remove_phrases,
+                cache,
+                departures_max_duration_min,
+            )
         except OSError as e:
             show_status_message(f"Could not connect to transport API: {type(e)}: {e}")
             show_status_message("Using cached departures")
             departures = cache.departures
     else:
         departures = cache.departures
-        show_status_message(f"Using cached departures, got the last update {cached_departures_age} sec ago")
+        show_status_message(
+            f"Using cached departures, got the last update {cached_departures_age} sec ago"
+        )
 
     grouped_by_stop = dict()
     for d in departures:
@@ -120,28 +132,33 @@ def get_configured_departures(
 
     return grouped_by_stop
 
-def update_departures_from_api(stops, lines_directions, remove_phrases, cache) -> list[UIDeparture]:
+
+def update_departures_from_api(
+    stops, lines_directions, remove_phrases, cache, duration
+) -> list[UIDeparture]:
     departures: list[UIDeparture] = []
     update_start_time = dateutil.now_epoch()
 
     for stop_id in stops:
         _log("getting departures from api for", stop_id)
-        all_departures_from_stop = transport_api.get_departures(stop_id)
+        all_departures_from_stop = transport_api.get_departures(stop_id, duration)
         _log("got", len(all_departures_from_stop), "departures from", stop_id)
         departures_list = [
-                    d for d in all_departures_from_stop if is_relevant(d, lines_directions, update_start_time)
-                ]
+            d
+            for d in all_departures_from_stop
+            if is_relevant(d, lines_directions, update_start_time)
+        ]
         for api_departure in departures_list:
             display_direction = clean_string(api_departure["direction"], remove_phrases)
 
             departures.append(
-                        UIDeparture(
-                            api_departure["line"]["name"],
-                            display_direction,
-                            _when(api_departure) - update_start_time,
-                            clean_string(api_departure["stop"]["name"], remove_phrases),
-                        )
-                    )
+                UIDeparture(
+                    api_departure["line"]["name"],
+                    display_direction,
+                    _when(api_departure) - update_start_time,
+                    clean_string(api_departure["stop"]["name"], remove_phrases),
+                )
+            )
     cache.last_departure_update = update_start_time
     return departures
 
@@ -206,9 +223,7 @@ def display_clock(utc_offset_seconds: int):
 
 
 def should_set_time(cache: StateCache) -> bool:
-    seconds_since_update = abs(
-        dateutil.now_epoch() - cache.last_rtc_ntp_update
-    )
+    seconds_since_update = abs(dateutil.now_epoch() - cache.last_rtc_ntp_update)
     return cache.last_rtc_ntp_update == 0 or seconds_since_update > 1 * 60 * 60
 
 
@@ -226,7 +241,8 @@ def loop(config, cache: StateCache):
         config["stops"],
         config["lines_directions"],
         config["remove_phrases"],
-        cache
+        cache,
+        config["max_duration_min"],
     )
     tz_info = timezone_api.get_tz_info_for_my_ip(config=config, cache=cache)
 
